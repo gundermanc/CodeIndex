@@ -222,17 +222,54 @@
             {
                 tasks.Add(Task.Run(() =>
                 {
+                    var fileDictionary = new Dictionary<string, Dictionary<string, List<Match>>>();
+
                     var lines = File.ReadAllLines(file);
 
                     int lineNumber = 1;
                     foreach (var line in lines)
                     {
+                        // Reject binary files.
+                        if (line.Contains("\0\0\0"))
+                        {
+                            fileDictionary.Clear();
+                            break;
+                        }
+
                         foreach (var segment in TokenizeString(line))
                         {
-                            AddMatch(dictionary, segment, file, lineNumber, line);
+                            // Trim tokens that don't look strictly relevant.
+                            if (segment.Length > 3 &&
+                                segment.Length < 50 &&
+                                char.IsLetter(segment[0]) &&
+                                segment.All(c => char.IsLetterOrDigit(c)))
+                            {
+                                AddMatch(fileDictionary, segment, file, lineNumber, line);
+                            }
                         }
 
                         lineNumber++;
+                    }
+
+                    lock (dictionary)
+                    {
+                        foreach (var item in fileDictionary)
+                        {
+                            if (!dictionary.TryGetValue(item.Key, out var filesDictionary))
+                            {
+                                filesDictionary = dictionary[item.Key] = new Dictionary<string, List<Match>>();
+                            }
+
+                            foreach (var fileMatches in item.Value)
+                            {
+                                if (!filesDictionary.TryGetValue(fileMatches.Key, out var matchList))
+                                {
+                                    matchList = filesDictionary[fileMatches.Key] = new List<Match>();
+                                }
+
+                                matchList.AddRange(fileMatches.Value);
+                            }
+                        }
                     }
                 }));
             }
@@ -249,25 +286,22 @@
             int lineNumber,
             string lineText)
         {
-            lock (dictionary)
+            if (!dictionary.TryGetValue(segment, out var filesDictionary))
             {
-                if (!dictionary.TryGetValue(segment, out var filesDictionary))
-                {
-                    filesDictionary = dictionary[segment] = new Dictionary<string, List<Match>>();
-                }
-
-                if (!filesDictionary.TryGetValue(filePath, out var matchList))
-                {
-                    matchList = filesDictionary[filePath] = new List<Match>();
-                }
-
-                matchList.Add(new Match(segment, lineNumber));
+                filesDictionary = dictionary[segment] = new Dictionary<string, List<Match>>();
             }
+
+            if (!filesDictionary.TryGetValue(filePath, out var matchList))
+            {
+                matchList = filesDictionary[filePath] = new List<Match>();
+            }
+
+            matchList.Add(new Match(segment, lineNumber));
         }
 
         private static string[] TokenizeString(string str)
         {
-            return str.Split(' ', '.', '{', '}', '<', '>', '(', ')', '[', ']', ':', ';', '+', '-', '*', '/');
+            return str.Split(' ', '.', '{', '}', '<', '>', '(', ')', '[', ']', ':', ';', '+', '-', '*', '/', ' ', '\0', ',', '\t', '_', '/', '|', '!', '-', '@', '#', '$', '%', '^', '&', '?', '~');
         }
     }
 }
