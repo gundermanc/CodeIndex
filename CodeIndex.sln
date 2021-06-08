@@ -3,7 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31326.6
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeIndex", "CodeIndex\CodeIndex.csproj", "{8648425D-0DF6-493B-BD8C-74BE4B50ECC5}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CodeIndex", "CodeIndex\CodeIndex.csproj", "{8648425D-0DF6-493B-BD8C-74BE4B50ECC5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeIndex.Paging", "CodeIndex.Paging\CodeIndex.Paging.csproj", "{D65C27DF-04A3-4BB6-B644-34A86071D860}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{8648425D-0DF6-493B-BD8C-74BE4B50ECC5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8648425D-0DF6-493B-BD8C-74BE4B50ECC5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8648425D-0DF6-493B-BD8C-74BE4B50ECC5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D65C27DF-04A3-4BB6-B644-34A86071D860}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D65C27DF-04A3-4BB6-B644-34A86071D860}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D65C27DF-04A3-4BB6-B644-34A86071D860}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D65C27DF-04A3-4BB6-B644-34A86071D860}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

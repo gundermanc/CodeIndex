@@ -9,4 +9,8 @@
     <PackageReference Include="System.Collections.Immutable" Version="5.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\CodeIndex.Paging\CodeIndex.Paging.csproj" />
+  </ItemGroup>
+
 </Project>
