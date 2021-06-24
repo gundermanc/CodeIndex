@@ -6,8 +6,8 @@
     public sealed class PageCache
     {
         private readonly int maxCount;
-        private readonly Dictionary<(Type, object), (object, DateTime)> cache
-            = new Dictionary<(Type, object), (object, DateTime)>();
+        private readonly Dictionary<(object, object), (object, DateTime)> cache
+            = new Dictionary<(object, object), (object, DateTime)>();
         private readonly object syncRoot = new object();
 
         public PageCache(int maxCount = 1000, int recordsPerPage = 15)
@@ -48,12 +48,12 @@
             return false;
         }
 
-        public void Add<TCachingObject, TKey, TValue>(TKey key, TValue value)
+        public void Add<TKey, TValue>(object owningObject, TKey key, TValue value)
         {
             lock (this.syncRoot)
             {
                 var oldestTimeStamp = DateTime.MaxValue;
-                (Type, object)? oldestRecordKey = null;
+                (object, object)? oldestRecordKey = null;
 
                 // If cache is at max count, do an eviction.
                 if (this.cache.Count + 1 > this.maxCount)
@@ -79,7 +79,7 @@
                 }
 
                 // Add new item.
-                this.cache.Add((typeof(TCachingObject), key), (value, DateTime.UtcNow));
+                this.cache[(owningObject, key)] = (value, DateTime.UtcNow);
             }
         }
     }

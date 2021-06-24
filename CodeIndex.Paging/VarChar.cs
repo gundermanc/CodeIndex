@@ -1,12 +1,11 @@
 ﻿namespace CodeIndex.Paging
 {
-    using System;
     using System.IO;
     using System.Text;
 
     public sealed class VarChar : IBinarySerializable
     {
-        private string value;
+        public string Value { get; internal set; }
 
         public VarChar()
         {
@@ -14,7 +13,7 @@
 
         public VarChar(string value)
         {
-            this.value = value;
+            this.Value = value;
         }
 
         public void Deserialize(BinaryReader reader, int rowSize)
@@ -32,7 +31,7 @@
                 builder.Append(c);
             }
 
-            this.value = builder.ToString();
+            this.Value = builder.ToString();
         }
 
         public void Serialize(BinaryWriter writer, int rowSize)
@@ -40,7 +39,7 @@
             int written = 0;
 
             // Write the string contents.
-            foreach (var c in this.value)
+            foreach (var c in this.Value)
             {
                 writer.Write(c);
                 written++;

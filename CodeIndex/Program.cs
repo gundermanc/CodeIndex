@@ -1,5 +1,7 @@
 ﻿namespace CodeIndex
 {
+    using CodeIndex.Index;
+    using CodeIndex.Paging;
     using System;
     using System.Collections.Generic;
     using System.IO;
@@ -8,78 +10,49 @@
 
     class Program
     {
-        // Search index:
-        //  - Ingestion:
-        //    - Check file timestamps
-        //    - If timestamps changed, update that file in the index.
-        //  - In memory part:
-        //    - Sorted Word list
-        //    - Each word has a file on disk { hash => list of files containing that word }.
-        //    - How do we avoid searching everything? Prioritization?
-        //  - On disk part
-
         static async Task Main(string[] args)
         {
-            Console.BackgroundColor = ConsoleColor.Black;
-            Console.ForegroundColor = ConsoleColor.White;
-            Console.Clear();
-
-            WriteLineInColor("Indexing...", ConsoleColor.Cyan);
-            var index = await BuildIndexAsync();
+            PrintAboutInfo();
 
             while (true)
             {
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("Find >> ");
-                Console.ForegroundColor = ConsoleColor.White;
+                Console.Clear();
+                PrintUsageInfo();
+                WriteLineInColor("CodeIndex>> ", ConsoleColor.Green);
+
+                var command = Console.ReadLine();
+
+                if (command.StartsWith("index ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var inputDirectory = command["index ".Length..];
+                    WriteLineInColor("Indexing...", ConsoleColor.Cyan);
+                    await Index.Index.CreateAsync(inputDirectory, inputDirectory);
+                }
+                else if (command.StartsWith("load "))
+                {
+                    var inputDirectory = command["load ".Length..];
+                    var index = Index.Index.Load(inputDirectory);
+
+                    SearchLoop(index);
+                }
+            }
+        }
+
+        private static void SearchLoop(Index.Index index)
+        {
+            while (true)
+            {
+                WriteLineInColor("Search for >>", ConsoleColor.Green);
 
                 var searchString = Console.ReadLine();
 
-                var tokens = TokenizeString(searchString);
-
-                // Search for matches for each token.
-                var matches = new List<KeyValuePair<string, Dictionary<string, List<Match>>>>();
-                foreach (var token in tokens)
-                {
-                    // Binary search to find prefix matches.
-                    var currentMatch = FindFirstMatch(index, token);
-                    while (currentMatch != -1 && index[currentMatch].Key.StartsWith(token, StringComparison.OrdinalIgnoreCase))
-                    {
-                        matches.Add(index[currentMatch++]);
-                    }
-                }
-
-                // Merge match results from different tokens into a mapping from { file } => { matches }.
-                var matchDictionary = new Dictionary<string, List<Match>>();
-                foreach (var match in matches)
-                {
-                    foreach (var fileMatch in match.Value)
-                    {
-                        if (!matchDictionary.TryGetValue(fileMatch.Key, out var fileMatches))
-                        {
-                            fileMatches = matchDictionary[fileMatch.Key] = new List<Match>();
-                        }
-
-                        fileMatches.AddRange(fileMatch.Value);
-                    }
-                }
-
-                // Rank by:
-                // Exact file name matches first.
-                // Then substring matches.
-                // Then de-prioritize tests, which are noisy and rarely what we want.
-                // Then score by term frequency.
-                var results = matchDictionary
-                    .OrderByDescending(match => tokens.Any(token => Path.GetFileNameWithoutExtension(match.Key).Equals(token, StringComparison.OrdinalIgnoreCase)))
-                    .ThenByDescending(match => tokens.Any(token => match.Key.Contains(token, StringComparison.OrdinalIgnoreCase)))
-                    .ThenBy(match => match.Key.Contains("Test"))
-                    .ThenByDescending(match => match.Value.Count).Take(10).ToList();
+                var results = index.FindMatches(searchString);
 
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine("Found matches in:");
                 Console.ForegroundColor = ConsoleColor.White;
                 int resultIndex = 0;
-                foreach (var file in results)
+                foreach (var file in results.Results)
                 {
                     Console.WriteLine($"#{resultIndex} - {file.Value.Count} - {file.Key}");
                     resultIndex++;
@@ -93,8 +66,8 @@
                     var number = Console.ReadLine();
                     if (int.TryParse(number, out var resultNumber))
                     {
-                        var selectedResult = results[resultNumber];
-                        FormatResult(selectedResult, tokens);
+                        var selectedResult = results.Results[resultNumber];
+                        // FormatResult(selectedResult, results.Tokens);
                     }
                     else
                     {
@@ -102,6 +75,20 @@
                     }
                 }
             }
+        }
+
+        private static void PrintUsageInfo()
+        {
+            Console.WriteLine("- index [input_directory] - indexes a folder.");
+            Console.WriteLine("- load [index_directory] - loads a pre-existing index");
+            Console.WriteLine("- exit - exits the application.");
+        }
+
+        private static void PrintAboutInfo()
+        {
+            Console.WriteLine("CodeIndex by Christian Gunderman");
+            Console.WriteLine("gundermanc@gmail.com");
+            Console.WriteLine();
         }
 
         private static void FormatResult(KeyValuePair<string, List<Match>> selectedResult, string[] tokens)
@@ -205,103 +192,32 @@
             return m;
         }
 
-        private static async Task<List<KeyValuePair<string, Dictionary<string, List<Match>>>>> BuildIndexAsync()
+        private static int FindFirstMatch(IReadOnlyList<VarChar> index, string token)
         {
-            var index = await BuildIndexDictionaryAsync(@"C:\VSP\src\Editor");
+            int l = 0;
+            int r = index.Count - 1;
+            int m = -1;
 
-            // Create sorted index.
-            return index.OrderBy(pair => pair.Key).ToList();
-        }
-
-        private static async Task<Dictionary<string, Dictionary<string, List<Match>>>> BuildIndexDictionaryAsync(string path)
-        {
-            var tasks = new List<Task>();
-            var dictionary = new Dictionary<string, Dictionary<string, List<Match>>>();
-
-            foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
+            while (l <= r)
             {
-                tasks.Add(Task.Run(() =>
+                m = (int)Math.Floor((l + r) / 2.0);
+                var comparison = index[m].Value.CompareTo(token);
+                if (comparison < 0)
                 {
-                    var fileDictionary = new Dictionary<string, Dictionary<string, List<Match>>>();
-
-                    var lines = File.ReadAllLines(file);
-
-                    int lineNumber = 1;
-                    foreach (var line in lines)
-                    {
-                        // Reject binary files.
-                        if (line.Contains("\0\0\0"))
-                        {
-                            fileDictionary.Clear();
-                            break;
-                        }
-
-                        foreach (var segment in TokenizeString(line))
-                        {
-                            // Trim tokens that don't look strictly relevant.
-                            if (segment.Length > 3 &&
-                                segment.Length < 50 &&
-                                char.IsLetter(segment[0]) &&
-                                segment.All(c => char.IsLetterOrDigit(c)))
-                            {
-                                AddMatch(fileDictionary, segment, file, lineNumber, line);
-                            }
-                        }
-
-                        lineNumber++;
-                    }
-
-                    lock (dictionary)
-                    {
-                        foreach (var item in fileDictionary)
-                        {
-                            if (!dictionary.TryGetValue(item.Key, out var filesDictionary))
-                            {
-                                filesDictionary = dictionary[item.Key] = new Dictionary<string, List<Match>>();
-                            }
-
-                            foreach (var fileMatches in item.Value)
-                            {
-                                if (!filesDictionary.TryGetValue(fileMatches.Key, out var matchList))
-                                {
-                                    matchList = filesDictionary[fileMatches.Key] = new List<Match>();
-                                }
-
-                                matchList.AddRange(fileMatches.Value);
-                            }
-                        }
-                    }
-                }));
+                    l = m + 1;
+                }
+                else if (comparison > 0)
+                {
+                    r = m - 1;
+                }
+                else
+                {
+                    return m;
+                }
             }
 
-            await Task.WhenAll(tasks);
-
-            return dictionary;
-        }
-
-        private static void AddMatch(
-            Dictionary<string, Dictionary<string, List<Match>>> dictionary,
-            string segment,
-            string filePath,
-            int lineNumber,
-            string lineText)
-        {
-            if (!dictionary.TryGetValue(segment, out var filesDictionary))
-            {
-                filesDictionary = dictionary[segment] = new Dictionary<string, List<Match>>();
-            }
-
-            if (!filesDictionary.TryGetValue(filePath, out var matchList))
-            {
-                matchList = filesDictionary[filePath] = new List<Match>();
-            }
-
-            matchList.Add(new Match(segment, lineNumber));
-        }
-
-        private static string[] TokenizeString(string str)
-        {
-            return str.Split(' ', '.', '{', '}', '<', '>', '(', ')', '[', ']', ':', ';', '+', '-', '*', '/', ' ', '\0', ',', '\t', '_', '/', '|', '!', '-', '@', '#', '$', '%', '^', '&', '?', '~');
+            // Update one last time and return the closest match.
+            return m;
         }
     }
 }

@@ -4,6 +4,7 @@
     using System.Collections;
     using System.Collections.Generic;
     using System.IO;
+    using System.Text;
 
     public sealed class PagingList<TData>
         : IReadOnlyList<TData> where TData : IBinarySerializable, new()
@@ -32,8 +33,8 @@
                 if (bytesWritten != rowSize && bytesWritten != 0)
                 {
                     // Overwrite teh bad data.
-                    writer.BaseStream.Position = beforePosition;
-                    // throw new InvalidDataException("Write does not conform to cell size");
+                    // writer.BaseStream.Position = beforePosition;
+                    throw new InvalidDataException("Write does not conform to cell size");
                 }
             }
         }
@@ -93,12 +94,12 @@
                 }
 
                 // Add the read page to the page cache.
-                this.pageCache.Add<PagingList<TData>, int, List<TData>>(pageNumber, newPage);
+                this.pageCache.Add(this, pageNumber, newPage);
                 return newPage[indexInPage];
             }
         }
 
-        public int Count => throw new NotImplementedException();
+        public int Count => (int)((this.reader.BaseStream.Length - sizeof(int)) / this.rowSize);
 
         public IEnumerator<TData> GetEnumerator()
         {

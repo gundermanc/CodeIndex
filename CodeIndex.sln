@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CodeIndex", "CodeIndex\Code
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeIndex.Paging", "CodeIndex.Paging\CodeIndex.Paging.csproj", "{D65C27DF-04A3-4BB6-B644-34A86071D860}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeIndex.Index", "CodeIndex.Index\CodeIndex.Index.csproj", "{4E361224-5002-4501-B566-DD18DBC2F0DA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{D65C27DF-04A3-4BB6-B644-34A86071D860}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D65C27DF-04A3-4BB6-B644-34A86071D860}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D65C27DF-04A3-4BB6-B644-34A86071D860}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4E361224-5002-4501-B566-DD18DBC2F0DA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4E361224-5002-4501-B566-DD18DBC2F0DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4E361224-5002-4501-B566-DD18DBC2F0DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4E361224-5002-4501-B566-DD18DBC2F0DA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
