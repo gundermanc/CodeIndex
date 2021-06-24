@@ -7,7 +7,9 @@
     using System.Text;
 
     public sealed class PagingList<TData>
-        : IReadOnlyList<TData> where TData : IBinarySerializable, new()
+        : IReadOnlyList<TData>,
+        IBinarySerializable
+        where TData : IBinarySerializable, new()
     {
         private readonly PageCache pageCache;
         private readonly BinaryReader reader;
@@ -60,17 +62,14 @@
 
                 // Cache hit?
                 // TODO: pass this specific instance instead of a type.
-                if (this.pageCache.TryGetValue<PagingList<TData>, int, List<TData>>(pageNumber, out var cachedPage))
+                if (this.pageCache.TryGetValue<int, List<TData>>(this, pageNumber, out var cachedPage))
                 {
                     return cachedPage[indexInPage];
                 }
 
                 // No? We'll need to read the page.
                 var newPage = new List<TData>();
-                for (int i = 0;
-                    i < this.pageCache.RecordsPerPage &&
-                    this.reader.BaseStream.Position < this.reader.BaseStream.Length;
-                    i++)
+                for (int i = 0; i < this.pageCache.RecordsPerPage; i++)
                 {
                     // Set position at next record...
                     // ...after the 4 byte size header
@@ -78,7 +77,13 @@
                     // ...after the i-th row.
                     this.reader.BaseStream.Position = sizeof(int) + (pageNumber * this.rowSize * this.pageCache.RecordsPerPage) + (this.rowSize * i);
 
+                    // Make sure the target position isn't beyond EOF.
                     var beforePosition = this.reader.BaseStream.Position;
+                    if (beforePosition == this.reader.BaseStream.Length)
+                    {
+                        break;
+                    }
+
                     var row = new TData();
                     row.Deserialize(this.reader, this.rowSize);
                     var afterPosition = this.reader.BaseStream.Position;

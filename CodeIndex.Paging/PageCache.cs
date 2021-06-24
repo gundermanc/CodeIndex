@@ -28,13 +28,13 @@
 
         public int RecordsPerPage { get; }
 
-        public bool TryGetValue<TCachingObject, TKey, TValue>(TKey key, out TValue value)
+        public bool TryGetValue<TKey, TValue>(object owningObject, TKey key, out TValue value)
         {
             lock (this.syncRoot)
             {
                 this.Lookups++;
 
-                if (this.cache.TryGetValue((typeof(TCachingObject), key), out var valueObj) &&
+                if (this.cache.TryGetValue((owningObject, key), out var valueObj) &&
                     valueObj.Item1 is TValue concreteValue)
                 {
                     this.CacheHits++;
