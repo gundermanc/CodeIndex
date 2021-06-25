@@ -4,7 +4,6 @@
     using System.Collections;
     using System.Collections.Generic;
     using System.IO;
-    using System.Text;
 
     public sealed class PagingList<TData>
         : IReadOnlyList<TData>

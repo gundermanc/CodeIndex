@@ -26,7 +26,7 @@
                 {
                     var inputDirectory = command["index ".Length..];
                     WriteLineInColor("Indexing...", ConsoleColor.Cyan);
-                    await Index.Index.CreateAsync(inputDirectory, inputDirectory);
+                    await Index.Index.CreateAsync(inputDirectory);
                 }
                 else if (command.StartsWith("load "))
                 {

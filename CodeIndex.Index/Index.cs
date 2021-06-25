@@ -1,36 +1,34 @@
 ﻿namespace CodeIndex.Index
 {
     using CodeIndex.Paging;
-
     using System;
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
+    using System.Text;
     using System.Threading.Tasks;
 
-    public sealed class Index
+    public sealed class Index : IDisposable
     {
-        private const string WordsListFile = "wordslist.dat";
-        private const string FilesListFile = "filelist.dat";
-        private const string FilesListRangesFile = "filelistranges.dat";
-        private const string ExcerptsFile = "excerpts.dat";
+        private const string IndexFileName = "index.dat";
+        private readonly StorageContextReader context;
         private readonly PagingList<VarChar> wordsList;
         private readonly PagingList<VarChar> filesList;
         private readonly PagingList<Paging.Range> filesRangesList;
 
         private Index(
+            StorageContextReader context,
             PagingList<VarChar> wordsList,
             PagingList<VarChar> filesList,
             PagingList<Paging.Range> filesRangesList)
         {
+            this.context = context;
             this.wordsList = wordsList;
             this.filesList = filesList;
             this.filesRangesList = filesRangesList;
         }
 
-        public static async Task CreateAsync(
-            string inputDirectory,
-            string indexDirectory)
+        public static async Task CreateAsync(string inputDirectory)
         {
             var index = await BuildIndexDictionaryAsync(inputDirectory);
 
@@ -40,26 +38,29 @@
             // Find the max word size to allocate.
             var maxWordSize = sortedIndex.Max(entry => entry.Key.Length);
 
-            // Write the sorted word list.
-            PagingList<VarChar>.Write(
-                Path.Combine(indexDirectory, WordsListFile),
-                maxWordSize,
-                sortedIndex.Select(entry => new VarChar(entry.Key)));
+            using (var context = new StorageContextWriter(Path.Combine(inputDirectory, IndexFileName)))
+            {
+                // Write the sorted word list.
+                PagingList<VarChar>.Write(
+                    context,
+                    maxWordSize,
+                    sortedIndex.Select(entry => new VarChar(entry.Key)));
 
-            var files = sortedIndex.SelectMany(entry => entry.Value).Select(entry => new VarChar(entry.Key));
-            var maxFileSize = files.Max(files => files.Value.Length);
+                var files = sortedIndex.SelectMany(entry => entry.Value).Select(entry => new VarChar(entry.Key));
+                var maxFileSize = files.Max(files => files.Value.Length);
 
-            // Write the files containing those words into a list.
-            PagingList<VarChar>.Write(
-                Path.Combine(indexDirectory, FilesListFile),
-                maxFileSize,
-                files);
+                // Write the files containing those words into a list.
+                PagingList<VarChar>.Write(
+                    context,
+                    maxFileSize,
+                    files);
 
-            // Write the mappings from words to ranges into a list.
-            PagingList<Paging.Range>.Write(
-                Path.Combine(indexDirectory, FilesListRangesFile),
-                8,
-                GenerateRangesForIndex(sortedIndex));
+                // Write the mappings from words to ranges into a list.
+                PagingList<Paging.Range>.Write(
+                    context,
+                    8,
+                    GenerateRangesForIndex(sortedIndex));
+            }
         }
 
         private static IEnumerable<Paging.Range> GenerateRangesForIndex(List<KeyValuePair<string, Dictionary<string, List<Match>>>> index)
@@ -74,13 +75,17 @@
             }
         }
 
-        public static Index Load(string indexDirectory)
+        public static Index Load(string inputDirectory)
         {
+            var context = new StorageContextReader(Path.Combine(inputDirectory, IndexFileName));
+
             var pageCache = new PageCache(maxCount: 15, recordsPerPage: 15);
+
             return new Index(
-                new PagingList<VarChar>(pageCache, Path.Combine(indexDirectory, WordsListFile)),
-                new PagingList<VarChar>(pageCache, Path.Combine(indexDirectory, FilesListFile)),
-                new PagingList<Paging.Range>(pageCache, Path.Combine(indexDirectory, FilesListRangesFile)));
+                context,
+                new PagingList<VarChar>(pageCache, context),
+                new PagingList<VarChar>(pageCache, context),
+                new PagingList<Paging.Range>(pageCache, context));
         }
 
         public ResultSet FindMatches(string query)
@@ -168,6 +173,11 @@
 
             foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
             {
+                if (file.Length != Encoding.UTF8.GetByteCount(file))
+                {
+                    continue;
+                }
+
                 tasks.Add(Task.Run(() =>
                 {
                     var fileDictionary = new Dictionary<string, Dictionary<string, List<Match>>>();
@@ -193,8 +203,7 @@
                             if (segment.Length > 3 &&
                                 segment.Length < 50 &&
                                 char.IsLetter(segment[0]) &&
-                                segment.All(c => char.IsLetterOrDigit(c)) &&
-                                segment.All(c => c <= byte.MaxValue))
+                                segment.Length == Encoding.UTF8.GetByteCount(segment))
                             {
                                 AddMatch(fileDictionary, segment, file, lineNumber, line);
                             }
@@ -255,5 +264,7 @@
         {
             return str.Split(' ', '.', '{', '}', '<', '>', '(', ')', '[', ']', ':', ';', '+', '-', '*', '/', ' ', '\0', ',', '\t', '_', '/', '|', '!', '-', '@', '#', '$', '%', '^', '&', '?', '~');
         }
+
+        public void Dispose() => this.context.Dispose();
     }
 }
