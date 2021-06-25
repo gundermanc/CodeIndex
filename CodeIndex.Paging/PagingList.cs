@@ -7,8 +7,7 @@
     using System.Text;
 
     public sealed class PagingList<TData>
-        : IReadOnlyList<TData>,
-        IBinarySerializable
+        : IReadOnlyList<TData>
         where TData : IBinarySerializable, new()
     {
         private readonly PageCache pageCache;
@@ -16,11 +15,11 @@
         private readonly int rowSize;
 
         public static void Write(
-            string filePath,
+            StorageContextWriter context,
             int rowSize,
             IEnumerable<TData> items)
         {
-            using var writer = new BinaryWriter(File.Create(filePath));
+            var writer = context.PushNewContext();
 
             writer.Write(rowSize);
 
@@ -43,12 +42,12 @@
 
         public PagingList(
             PageCache pageCache,
-            string filePath)
+            StorageContextReader reader)
         {
             this.pageCache = pageCache;
 
             // TODO: dispose.
-            this.reader = new BinaryReader(File.OpenRead(filePath));
+            this.reader = reader.PushNewContext();
 
             this.rowSize = this.reader.ReadInt32();
         }
@@ -57,6 +56,11 @@
         {
             get
             {
+                if (index < 0 || index > this.Count)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(index));
+                }
+
                 var pageNumber = index / this.pageCache.RecordsPerPage;
                 var indexInPage = index % this.pageCache.RecordsPerPage;
 
@@ -79,7 +83,7 @@
 
                     // Make sure the target position isn't beyond EOF.
                     var beforePosition = this.reader.BaseStream.Position;
-                    if (beforePosition == this.reader.BaseStream.Length)
+                    if (beforePosition >= this.reader.BaseStream.Length)
                     {
                         break;
                     }

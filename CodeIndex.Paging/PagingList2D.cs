@@ -13,24 +13,22 @@
         private readonly PagingList<TData> secondList;
 
         public static void Write(
-            string firstListFilePath,
-            string secondListFilePath,
-            int secondListRowSize,
+            StorageContextWriter context,
+            int rowSize,
             IReadOnlyList<IReadOnlyList<TData>> data)
         {
             var innerItems = data.SelectMany(data => data);
 
-            PagingList<TData>.Write(secondListFilePath, secondListRowSize, innerItems);
-            PagingList<Range>.Write(firstListFilePath, 8, GenerateRanges(data));
+            PagingList<Range>.Write(context, 8, GenerateRanges(data));
+            PagingList<TData>.Write(context, rowSize, innerItems);
         }
 
         public PagingList2D(
             PageCache pageCache,
-            string firstListFilePath,
-            string secondListFilePath)
+            StorageContextReader reader)
         {
-            this.firstList = new PagingList<Range>(pageCache, firstListFilePath);
-            this.secondList = new PagingList<TData>(pageCache, secondListFilePath);
+            this.firstList = new PagingList<Range>(pageCache, reader);
+            this.secondList = new PagingList<TData>(pageCache, reader);
         }
 
         public IReadOnlyList<TData> this[int index]
