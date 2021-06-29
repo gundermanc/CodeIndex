@@ -14,18 +14,18 @@
         private readonly StorageContextReader context;
         private readonly PagingList<VarChar> wordsList;
         private readonly PagingList<VarChar> filesList;
-        private readonly PagingList<Paging.Range> filesRangesList;
+        private readonly PagingList2D<Integer> wordIndexToFileIndiciesMapping;
 
         private Index(
             StorageContextReader context,
             PagingList<VarChar> wordsList,
             PagingList<VarChar> filesList,
-            PagingList<Paging.Range> filesRangesList)
+            PagingList2D<Integer> wordIndexToFileIndiciesMapping)
         {
             this.context = context;
             this.wordsList = wordsList;
             this.filesList = filesList;
-            this.filesRangesList = filesRangesList;
+            this.wordIndexToFileIndiciesMapping = wordIndexToFileIndiciesMapping;
         }
 
         public static async Task CreateAsync(string inputDirectory)
@@ -33,7 +33,7 @@
             var index = await BuildIndexDictionaryAsync(inputDirectory);
 
             // Create sorted index.
-            var sortedIndex = index.OrderBy(pair => pair.Key).ToList();
+            List<KeyValuePair<string, Dictionary<string, List<Match>>>> sortedIndex = index.OrderBy(pair => pair.Key).ToList();
 
             // Find the max word size to allocate.
             var maxWordSize = sortedIndex.Max(entry => entry.Key.Length);
@@ -46,32 +46,36 @@
                     maxWordSize,
                     sortedIndex.Select(entry => new VarChar(entry.Key)));
 
-                var files = sortedIndex.SelectMany(entry => entry.Value).Select(entry => new VarChar(entry.Key));
-                var maxFileSize = files.Max(files => files.Value.Length);
-
-                // Write the files containing those words into a list.
+                // Write the sorted files list.
+                var sortedFiles = sortedIndex.SelectMany(entry => entry.Value.Keys).Distinct().OrderBy(entry => entry).ToArray();
+                var maxFileSize = sortedFiles.Max(files => files.Length);
                 PagingList<VarChar>.Write(
                     context,
                     maxFileSize,
-                    files);
+                    sortedFiles.Select(file => new VarChar(file)));
 
-                // Write the mappings from words to ranges into a list.
-                PagingList<Paging.Range>.Write(
-                    context,
-                    8,
-                    GenerateRangesForIndex(sortedIndex));
-            }
-        }
+                // Write the mapping from the sorted words list indexes to the sorted files that contain them.
+                var containingFileEntries = new List<List<Integer>>();
+                foreach (var wordEntry in sortedIndex)
+                {
+                    if (index.TryGetValue(wordEntry.Key, out var wordMatches))
+                    {
+                        var entries = new List<Integer>();
 
-        private static IEnumerable<Paging.Range> GenerateRangesForIndex(List<KeyValuePair<string, Dictionary<string, List<Match>>>> index)
-        {
-            int start = 0;
-            foreach (var word in index)
-            {
-                var filesContaining = word.Value.Keys.Count;
-                yield return new Paging.Range(start, filesContaining);
+                        foreach (var file in wordMatches.Keys)
+                        {
+                            // TODO: binary search in tight inner loop is very slow.
+                            var entryIndex = Array.BinarySearch(sortedFiles, file);
+                            if (entryIndex != -1)
+                            {
+                                entries.Add(new Integer(entryIndex));
+                            }
+                        }
 
-                start += filesContaining;
+                        containingFileEntries.Add(entries);
+                    }
+                }
+                PagingList2D<Integer>.Write(context, 4, containingFileEntries);
             }
         }
 
@@ -85,7 +89,7 @@
                 context,
                 new PagingList<VarChar>(pageCache, context),
                 new PagingList<VarChar>(pageCache, context),
-                new PagingList<Paging.Range>(pageCache, context));
+                new PagingList2D<Integer>(pageCache, context));
         }
 
         public ResultSet FindMatches(string query)
@@ -106,22 +110,26 @@
             }
 
             // Assemble a mapping from file => contained keyword.
-            var fileTokenMatches = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            var fileTokenMatches = new Dictionary<string, List<Match>>(StringComparer.OrdinalIgnoreCase);
             foreach (var matchIndex in matchIndexes)
             {
                 var word = this.wordsList[matchIndex];
-                var filesRange = this.filesRangesList[matchIndex];
+                var containingFileIndicies = this.wordIndexToFileIndiciesMapping[matchIndex];
 
-                for (int i = filesRange.Start; i < filesRange.Start + filesRange.Length; i++)
+                for (int i = 0; i < containingFileIndicies.Count; i++)
                 {
-                    var fileName = this.filesList[i];
+                    var fileName = this.filesList[containingFileIndicies[i].Value];
 
                     if (!fileTokenMatches.TryGetValue(fileName.Value, out var fileTokens))
                     {
-                        fileTokens = fileTokenMatches[fileName.Value] = new List<string>();
+                        fileTokens = fileTokenMatches[fileName.Value] = new List<Match>();
                     }
 
-                    fileTokens.Add(word.Value);
+                    var perFileIndex = IndexFile(fileName.Value);
+                    if (perFileIndex.TryGetValue(word.Value, out var matches))
+                    {
+                        fileTokens.AddRange(matches);
+                    }
                 }
             }
 
@@ -131,8 +139,8 @@
             // Then de-prioritize tests, which are noisy and rarely what we want.
             // Then score by term frequency.
             var results = fileTokenMatches
-                .OrderByDescending(match => match.Value.Any(token => Path.GetFileNameWithoutExtension(match.Key).Equals(token, StringComparison.OrdinalIgnoreCase)))
-                .ThenByDescending(match => tokens.Any(token => match.Key.Contains(token, StringComparison.OrdinalIgnoreCase)))
+                //.OrderByDescending(match => match.Value.Any(token => Path.GetFileNameWithoutExtension(match.Key).Equals(token, StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(match => tokens.Any(token => match.Key.Contains(token, StringComparison.OrdinalIgnoreCase)))
                 .ThenBy(match => match.Key.Contains("Test"))
                 .ThenByDescending(match => match.Value.Count).Take(10).ToList();
 
@@ -180,37 +188,7 @@
 
                 tasks.Add(Task.Run(() =>
                 {
-                    var fileDictionary = new Dictionary<string, Dictionary<string, List<Match>>>();
-
-                    var lines = File.ReadAllLines(file);
-
-                    int lineNumber = 1;
-                    foreach (var line in lines)
-                    {
-                        // Reject binary files.
-                        if (line.Contains("\0\0\0"))
-                        {
-                            fileDictionary.Clear();
-                            break;
-                        }
-
-                        foreach (var segment in TokenizeString(line))
-                        {
-                            // Trim tokens that don't look strictly relevant.
-                            //
-                            // Eliminate multi-byte characters as they seem
-                            // to cause trouble with serialization.
-                            if (segment.Length > 3 &&
-                                segment.Length < 50 &&
-                                char.IsLetter(segment[0]) &&
-                                segment.Length == Encoding.UTF8.GetByteCount(segment))
-                            {
-                                AddMatch(fileDictionary, segment, file, lineNumber, line);
-                            }
-                        }
-
-                        lineNumber++;
-                    }
+                    Dictionary<string, List<Match>> fileDictionary = IndexFile(file);
 
                     lock (dictionary)
                     {
@@ -223,12 +201,12 @@
 
                             foreach (var fileMatches in item.Value)
                             {
-                                if (!filesDictionary.TryGetValue(fileMatches.Key, out var matchList))
+                                if (!filesDictionary.TryGetValue(file, out var matchList))
                                 {
-                                    matchList = filesDictionary[fileMatches.Key] = new List<Match>();
+                                    matchList = filesDictionary[file] = new List<Match>();
                                 }
 
-                                matchList.AddRange(fileMatches.Value);
+                                matchList.Add(fileMatches);
                             }
                         }
                     }
@@ -240,24 +218,56 @@
             return dictionary;
         }
 
+        private static Dictionary<string, List<Match>> IndexFile(string file)
+        {
+            var fileDictionary = new Dictionary<string, List<Match>>();
+
+            var lines = File.ReadAllLines(file);
+
+            int lineNumber = 1;
+            foreach (var line in lines)
+            {
+                // Reject binary files.
+                if (line.Contains("\0\0\0"))
+                {
+                    fileDictionary.Clear();
+                    break;
+                }
+
+                foreach (var segment in TokenizeString(line))
+                {
+                    // Trim tokens that don't look strictly relevant.
+                    //
+                    // Eliminate multi-byte characters as they seem
+                    // to cause trouble with serialization.
+                    if (segment.Length > 3 &&
+                        segment.Length < 50 &&
+                        char.IsLetter(segment[0]) &&
+                        segment.Length == Encoding.UTF8.GetByteCount(segment))
+                    {
+                        AddMatch(fileDictionary, segment, file, lineNumber, line);
+                    }
+                }
+
+                lineNumber++;
+            }
+
+            return fileDictionary;
+        }
+
         private static void AddMatch(
-            Dictionary<string, Dictionary<string, List<Match>>> dictionary,
+            Dictionary<string, List<Match>> dictionary,
             string segment,
             string filePath,
             int lineNumber,
             string lineText)
         {
-            if (!dictionary.TryGetValue(segment, out var filesDictionary))
+            if (!dictionary.TryGetValue(segment, out var matchesList))
             {
-                filesDictionary = dictionary[segment] = new Dictionary<string, List<Match>>();
+                matchesList = dictionary[segment] = new List<Match>();
             }
 
-            if (!filesDictionary.TryGetValue(filePath, out var matchList))
-            {
-                matchList = filesDictionary[filePath] = new List<Match>();
-            }
-
-            matchList.Add(new Match(segment, lineNumber));
+            matchesList.Add(new Match(segment, lineNumber));
         }
 
         private static string[] TokenizeString(string str)

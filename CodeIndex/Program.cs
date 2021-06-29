@@ -67,7 +67,7 @@
                     if (int.TryParse(number, out var resultNumber))
                     {
                         var selectedResult = results.Results[resultNumber];
-                        // FormatResult(selectedResult, results.Tokens);
+                        FormatResult(selectedResult, results.Tokens);
                     }
                     else
                     {
