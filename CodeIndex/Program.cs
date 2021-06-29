@@ -54,7 +54,7 @@
                 int resultIndex = 0;
                 foreach (var file in results.Results)
                 {
-                    Console.WriteLine($"#{resultIndex} - {file.Value.Count} - {file.Key}");
+                    Console.WriteLine($"#{resultIndex} - {file.Key}");
                     resultIndex++;
                 }
 
@@ -91,11 +91,11 @@
             Console.WriteLine();
         }
 
-        private static void FormatResult(KeyValuePair<string, List<Match>> selectedResult, string[] tokens)
+        private static void FormatResult(KeyValuePair<string, LazyMatchCollection> selectedResult, string[] tokens)
         {
             const int ContextLines = 6;
 
-            foreach (var result in selectedResult.Value.Take(10))
+            foreach (var result in selectedResult.Value.GetMatches().Take(10))
             {
                 WriteLineInColor($"{result.LineNumber}:{selectedResult.Key}", ConsoleColor.Cyan);
 
@@ -164,7 +164,7 @@
             Console.ForegroundColor = ConsoleColor.White;
         }
 
-        private static int FindFirstMatch(List<KeyValuePair<string, Dictionary<string, List<Match>>>> index, string token)
+        private static int FindFirstMatch(List<KeyValuePair<string, Dictionary<string, List<LazyMatchCollection>>>> index, string token)
         {
             int l = 0;
             int r = index.Count - 1;

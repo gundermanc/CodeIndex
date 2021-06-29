@@ -94,7 +94,7 @@
 
         public ResultSet FindMatches(string query)
         {
-            var tokens = TokenizeString(query);
+            var tokens = FileIndexer.TokenizeString(query);
 
             // Search for matching tokens.
             var matchIndexes = new List<int>();
@@ -110,7 +110,7 @@
             }
 
             // Assemble a mapping from file => contained keyword.
-            var fileTokenMatches = new Dictionary<string, List<Match>>(StringComparer.OrdinalIgnoreCase);
+            var fileTokenMatches = new Dictionary<string, LazyMatchCollection>(StringComparer.OrdinalIgnoreCase);
             foreach (var matchIndex in matchIndexes)
             {
                 var word = this.wordsList[matchIndex];
@@ -122,13 +122,7 @@
 
                     if (!fileTokenMatches.TryGetValue(fileName.Value, out var fileTokens))
                     {
-                        fileTokens = fileTokenMatches[fileName.Value] = new List<Match>();
-                    }
-
-                    var perFileIndex = IndexFile(fileName.Value);
-                    if (perFileIndex.TryGetValue(word.Value, out var matches))
-                    {
-                        fileTokens.AddRange(matches);
+                        fileTokens = fileTokenMatches[fileName.Value] = new LazyMatchCollection(fileName.Value, word.Value);
                     }
                 }
             }
@@ -142,7 +136,8 @@
                 //.OrderByDescending(match => match.Value.Any(token => Path.GetFileNameWithoutExtension(match.Key).Equals(token, StringComparison.OrdinalIgnoreCase)))
                 .OrderByDescending(match => tokens.Any(token => match.Key.Contains(token, StringComparison.OrdinalIgnoreCase)))
                 .ThenBy(match => match.Key.Contains("Test"))
-                .ThenByDescending(match => match.Value.Count).Take(10).ToList();
+                //.ThenByDescending(match => match.Value.Count)
+                .Take(10).ToList();
 
             return new ResultSet(tokens, results);
         }
@@ -188,7 +183,7 @@
 
                 tasks.Add(Task.Run(() =>
                 {
-                    Dictionary<string, List<Match>> fileDictionary = IndexFile(file);
+                    Dictionary<string, List<Match>> fileDictionary = FileIndexer.IndexFile(file);
 
                     lock (dictionary)
                     {
@@ -216,63 +211,6 @@
             await Task.WhenAll(tasks);
 
             return dictionary;
-        }
-
-        private static Dictionary<string, List<Match>> IndexFile(string file)
-        {
-            var fileDictionary = new Dictionary<string, List<Match>>();
-
-            var lines = File.ReadAllLines(file);
-
-            int lineNumber = 1;
-            foreach (var line in lines)
-            {
-                // Reject binary files.
-                if (line.Contains("\0\0\0"))
-                {
-                    fileDictionary.Clear();
-                    break;
-                }
-
-                foreach (var segment in TokenizeString(line))
-                {
-                    // Trim tokens that don't look strictly relevant.
-                    //
-                    // Eliminate multi-byte characters as they seem
-                    // to cause trouble with serialization.
-                    if (segment.Length > 3 &&
-                        segment.Length < 50 &&
-                        char.IsLetter(segment[0]) &&
-                        segment.Length == Encoding.UTF8.GetByteCount(segment))
-                    {
-                        AddMatch(fileDictionary, segment, file, lineNumber, line);
-                    }
-                }
-
-                lineNumber++;
-            }
-
-            return fileDictionary;
-        }
-
-        private static void AddMatch(
-            Dictionary<string, List<Match>> dictionary,
-            string segment,
-            string filePath,
-            int lineNumber,
-            string lineText)
-        {
-            if (!dictionary.TryGetValue(segment, out var matchesList))
-            {
-                matchesList = dictionary[segment] = new List<Match>();
-            }
-
-            matchesList.Add(new Match(segment, lineNumber));
-        }
-
-        private static string[] TokenizeString(string str)
-        {
-            return str.Split(' ', '.', '{', '}', '<', '>', '(', ')', '[', ']', ':', ';', '+', '-', '*', '/', ' ', '\0', ',', '\t', '_', '/', '|', '!', '-', '@', '#', '$', '%', '^', '&', '?', '~');
         }
 
         public void Dispose() => this.context.Dispose();

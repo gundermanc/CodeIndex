@@ -4,7 +4,7 @@ namespace CodeIndex.Index
 {
     public class ResultSet
     {
-        public ResultSet(string[] tokens, List<KeyValuePair<string, List<Match>>> results)
+        public ResultSet(string[] tokens, List<KeyValuePair<string, LazyMatchCollection>> results)
         {
             this.Tokens = tokens;
             this.Results = results;
@@ -12,6 +12,6 @@ namespace CodeIndex.Index
 
         public string[] Tokens { get; }
 
-        public List<KeyValuePair<string, List<Match>>> Results { get; }
+        public List<KeyValuePair<string, LazyMatchCollection>> Results { get; }
     }
 }

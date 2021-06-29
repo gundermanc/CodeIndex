@@ -5,11 +5,6 @@
 
     public sealed class Match
     {
-        public Match()
-        {
-
-        }
-
         public Match(string word, int lineNumber)
         {
             this.Word = word;
