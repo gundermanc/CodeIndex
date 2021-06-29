@@ -17,6 +17,7 @@
 
         public IEnumerable<Match> GetMatches()
             => FileIndexer.IndexFile(this.FileName)
+            .Where(pair => pair.Key == this.Word)
             .SelectMany(pair => pair.Value);
     }
 }

@@ -112,7 +112,7 @@
                         int newEndIndex = line.Length - 1;
                         foreach (var token in tokens)
                         {
-                            var candidateStartIndex = line.IndexOf(token, k + 1);
+                            var candidateStartIndex = line.IndexOf(token, Math.Min(line.Length, k + 1));
                             if (candidateStartIndex < newStartIndex)
                             {
                                 newStartIndex = candidateStartIndex;
