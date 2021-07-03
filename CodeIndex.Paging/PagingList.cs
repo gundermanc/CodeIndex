@@ -32,8 +32,6 @@
                 var bytesWritten = afterPosition - beforePosition;
                 if (bytesWritten != rowSize && bytesWritten != 0)
                 {
-                    // Overwrite teh bad data.
-                    // writer.BaseStream.Position = beforePosition;
                     throw new InvalidDataException("Write does not conform to cell size");
                 }
             }

@@ -1,5 +1,6 @@
 ﻿namespace CodeIndex.Index
 {
+    using System;
     using System.Collections.Generic;
     using System.Linq;
 
@@ -17,7 +18,7 @@
 
         public IEnumerable<Match> GetMatches()
             => FileIndexer.IndexFile(this.FileName)
-            .Where(pair => pair.Key == this.Word)
+            .Where(pair => string.Equals(pair.Key, this.Word, StringComparison.OrdinalIgnoreCase))
             .SelectMany(pair => pair.Value);
     }
 }

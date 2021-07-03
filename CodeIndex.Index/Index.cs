@@ -5,7 +5,6 @@
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
-    using System.Text;
     using System.Threading.Tasks;
 
     public sealed class Index : IDisposable
@@ -30,13 +29,14 @@
 
         public static async Task CreateAsync(string inputDirectory)
         {
-            var index = await BuildIndexDictionaryAsync(inputDirectory);
+            var files = Directory.GetFiles(inputDirectory, "*", SearchOption.AllDirectories);
+            var indexer = new CompoundIndexer(files);
 
-            // Create sorted index.
-            List<KeyValuePair<string, Dictionary<string, List<Match>>>> sortedIndex = index.OrderBy(pair => pair.Key).ToList();
+            (var words, var wordToFileMap) = await indexer.IndexAsync();
 
             // Find the max word size to allocate.
-            var maxWordSize = sortedIndex.Max(entry => entry.Key.Length);
+            var maxWordSize = words.Max(entry => entry.Length);
+            var sortedWords = words.OrderBy(word => word).ToArray();
 
             using (var context = new StorageContextWriter(Path.Combine(inputDirectory, IndexFileName)))
             {
@@ -44,10 +44,10 @@
                 PagingList<VarChar>.Write(
                     context,
                     maxWordSize,
-                    sortedIndex.Select(entry => new VarChar(entry.Key)));
+                    sortedWords.Select(entry => new VarChar(entry)));
 
                 // Write the sorted files list.
-                var sortedFiles = sortedIndex.SelectMany(entry => entry.Value.Keys).Distinct().OrderBy(entry => entry).ToArray();
+                var sortedFiles = indexer.Files.OrderBy(entry => entry).ToArray();
                 var maxFileSize = sortedFiles.Max(files => files.Length);
                 PagingList<VarChar>.Write(
                     context,
@@ -56,13 +56,13 @@
 
                 // Write the mapping from the sorted words list indexes to the sorted files that contain them.
                 var containingFileEntries = new List<List<Integer>>();
-                foreach (var wordEntry in sortedIndex)
+                foreach (var word in sortedWords)
                 {
-                    if (index.TryGetValue(wordEntry.Key, out var wordMatches))
+                    if (wordToFileMap.TryGetValue(word, out var containingFiles))
                     {
                         var entries = new List<Integer>();
 
-                        foreach (var file in wordMatches.Keys)
+                        foreach (var file in containingFiles)
                         {
                             // TODO: binary search in tight inner loop is very slow.
                             var entryIndex = Array.BinarySearch(sortedFiles, file);
@@ -75,6 +75,7 @@
                         containingFileEntries.Add(entries);
                     }
                 }
+
                 PagingList2D<Integer>.Write(context, 4, containingFileEntries);
             }
         }
@@ -133,7 +134,7 @@
             // Then de-prioritize tests, which are noisy and rarely what we want.
             // Then score by term frequency.
             var results = fileTokenMatches
-                //.OrderByDescending(match => match.Value.Any(token => Path.GetFileNameWithoutExtension(match.Key).Equals(token, StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(match => tokens.Any(token => Path.GetFileNameWithoutExtension(match.Value.FileName).Equals(token, StringComparison.OrdinalIgnoreCase)))
                 .OrderByDescending(match => tokens.Any(token => match.Key.Contains(token, StringComparison.OrdinalIgnoreCase)))
                 .ThenBy(match => match.Key.Contains("Test"))
                 //.ThenByDescending(match => match.Value.Count)
@@ -167,50 +168,6 @@
             }
 
             return m;
-        }
-
-        private static async Task<Dictionary<string, Dictionary<string, List<Match>>>> BuildIndexDictionaryAsync(string path)
-        {
-            var tasks = new List<Task>();
-            var dictionary = new Dictionary<string, Dictionary<string, List<Match>>>();
-
-            foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
-            {
-                if (file.Length != Encoding.UTF8.GetByteCount(file))
-                {
-                    continue;
-                }
-
-                tasks.Add(Task.Run(() =>
-                {
-                    Dictionary<string, List<Match>> fileDictionary = FileIndexer.IndexFile(file);
-
-                    lock (dictionary)
-                    {
-                        foreach (var item in fileDictionary)
-                        {
-                            if (!dictionary.TryGetValue(item.Key, out var filesDictionary))
-                            {
-                                filesDictionary = dictionary[item.Key] = new Dictionary<string, List<Match>>();
-                            }
-
-                            foreach (var fileMatches in item.Value)
-                            {
-                                if (!filesDictionary.TryGetValue(file, out var matchList))
-                                {
-                                    matchList = filesDictionary[file] = new List<Match>();
-                                }
-
-                                matchList.Add(fileMatches);
-                            }
-                        }
-                    }
-                }));
-            }
-
-            await Task.WhenAll(tasks);
-
-            return dictionary;
         }
 
         public void Dispose() => this.context.Dispose();
