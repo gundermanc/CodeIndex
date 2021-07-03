@@ -37,9 +37,9 @@
         {
             var consumerTasks = new List<Task>();
 
-            for (int i = 0; i < Environment.ProcessorCount; i++)
+            for (int i = 0; i <  Environment.ProcessorCount; i++)
             {
-                consumerTasks.Add(Task.Run(this.Consume));
+                consumerTasks.Add(Task.Run(this.ConsumeAsync));
             }
 
             await Task.WhenAll(consumerTasks);
@@ -47,7 +47,7 @@
             return (this.words, this.wordToContainingFileMapping);
         }
 
-        private void Consume()
+        private async Task ConsumeAsync()
         {
             string? file = null;
 
@@ -68,10 +68,9 @@
                     }
                 }
 
-                // TODO: avoid alloc-ing dictionary.
-                var fileDictionary = FileIndexer.IndexFile(file);
+                var words = await FileIndexer.QuickIndexFile(file);
 
-                foreach (var word in fileDictionary.Keys)
+                foreach (var word in words)
                 {
                     this.AddWord(file, word);
                 }
