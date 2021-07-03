@@ -6,12 +6,15 @@
     using System.Linq;
     using System.Text;
     using System.Threading.Tasks;
+    using static CodeIndex.Index.NonAllocatingKey;
 
     internal static class FileIndexer
     {
-        public static async Task<IEnumerable<string>> QuickIndexFile(string file)
+        public static async Task<IEnumerable<string>> QuickIndexFile(
+            NonAllocatingKeySourceCache cache,
+            string file)
         {
-            var source = new NonAllocatingKeySource();
+            var source = new NonAllocatingKeySource(cache);
             HashSet<NonAllocatingKey> words = new HashSet<NonAllocatingKey>();
 
             char [] buffer = new char[1024];

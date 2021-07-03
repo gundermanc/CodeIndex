@@ -1,12 +1,24 @@
 ﻿namespace CodeIndex.Index
 {
     using System;
+    using System.Collections.Generic;
     using System.Diagnostics.CodeAnalysis;
+    using System.Threading;
+
     using CodeIndex.Paging;
+    using static CodeIndex.Index.NonAllocatingKey;
 
     internal sealed class NonAllocatingKeySource
     {
+        public NonAllocatingKeySource(NonAllocatingKeySourceCache cache)
+        {
+            this.Cache = cache;
+        }
+
         public int ActiveKeyId { get; private set;}
+
+        internal NonAllocatingKeySourceCache Cache { get; }
+
 
         public NonAllocatingKey GetTransientKey(ReadOnlyMemory<char> memory)
         {
@@ -91,11 +103,49 @@
 
         public NonAllocatingKey Realize()
         {
-            return new NonAllocatingKey(
-                this.source,
-                this.Memory.ToString(),
-                Array.Empty<char>().AsMemory(),
-                this.keyId);
+            return this.source.Cache.Realize(this);
+        }
+
+        internal sealed class NonAllocatingKeySourceCache
+        {
+            private readonly Dictionary<NonAllocatingKey, NonAllocatingKey> realizedKeyCache = new();
+
+            // Cache is shared across all threads, use reader-writer lock to avoid lock contention.
+            // private readonly ReaderWriterLock readerWriterLock = new();
+
+            public NonAllocatingKey Realize(NonAllocatingKey key)
+            {
+                try
+                {
+                    // this.readerWriterLock.AcquireReaderLock(int.MaxValue);
+
+                    if (!this.realizedKeyCache.TryGetValue(key, out var realizedKey))
+                    {
+                        // this.readerWriterLock.UpgradeToWriterLock(int.MaxValue);
+
+                        // Realize into an actual string key.
+                        realizedKey = new NonAllocatingKey(
+                            key.source,
+                            key.unrealizedString.ToString(),
+                            key.unrealizedString,
+                            key.keyId);
+
+                        // Add to the cache so we can reuse the same string for subsequent occurrences
+                        // of this word.
+                        //
+                        // From the dictionary perspective the two keys are equal, so we'll have to delete
+                        // and remove it to ensure it's replaced.
+                        this.realizedKeyCache.Remove(realizedKey);
+                        this.realizedKeyCache[realizedKey] = realizedKey;
+                    }
+
+                    return realizedKey;
+                }
+                finally
+                {
+                    // this.readerWriterLock.ReleaseLock();
+                }
+            }
         }
     }
 }

@@ -5,6 +5,8 @@
     using System.Text;
     using System.Threading.Tasks;
 
+    using static CodeIndex.Index.NonAllocatingKey;
+
     internal sealed class CompoundIndexer
     {
         private readonly HashSet<string> words = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -49,6 +51,7 @@
 
         private async Task ConsumeAsync()
         {
+            NonAllocatingKeySourceCache cache = new();
             string? file = null;
 
             while (true)
@@ -68,7 +71,7 @@
                     }
                 }
 
-                var words = await FileIndexer.QuickIndexFile(file);
+                var words = await FileIndexer.QuickIndexFile(cache, file);
 
                 foreach (var word in words)
                 {
