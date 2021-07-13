@@ -1,7 +1,7 @@
 ﻿namespace CodeIndex
 {
+    using CodeIndex.Cli.Server;
     using CodeIndex.Index;
-    using CodeIndex.Paging;
     using System;
     using System.Collections.Generic;
     using System.IO;
@@ -12,6 +12,11 @@
     {
         static async Task Main(string[] args)
         {
+            if (await ServerTarget.TryStartServerAsync(args))
+            {
+                return;
+            }
+
             PrintAboutInfo();
 
             while (true)
@@ -81,6 +86,7 @@
         {
             Console.WriteLine("- index [input_directory] - indexes a folder.");
             Console.WriteLine("- load [index_directory] - loads a pre-existing index");
+            Console.WriteLine("- server - configures as a server for handling search requests");
             Console.WriteLine("- exit - exits the application.");
         }
 
