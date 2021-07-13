@@ -58,7 +58,7 @@
         }
 
         [JsonRpcMethod(CodeIndexMethods.SearchIndexMethodName)]
-        public SearchIndexResponse SearchIndex(string? directory, string? searchQuery)
+        public async Task<SearchIndexResponse> SearchIndexAsync(string? directory, string? searchQuery)
         {
             if (directory is null ||
                 searchQuery is null)
@@ -66,29 +66,34 @@
                 throw new ArgumentException("No parameters can be null");
             }
 
-            lock (this.loadedIndexes)
+            // StreamJsonRpc's default synchronization context disallows concurrency,
+            // which can act as a bottleneck in Ctrl+Q, where we may have multiple
+            // requests in progress simutaneously as the user types. Explicitly yield
+            // the thread so we don't block parallel requests.
+            //
+            // TODO: we should probably also propagate the cancellations.
+            await Task.Yield();
+
+            this.EnsureIndexLoaded(directory);
+
+            if (!this.loadedIndexes.TryGetValue(directory, out var index))
             {
-                this.EnsureIndexLoaded(directory);
-
-                if (!this.loadedIndexes.TryGetValue(directory, out var index))
-                {
-                    throw new InvalidOperationException("Index is not loaded");
-                }
-
-                var result = index.FindMatches(searchQuery);
-
-                return new SearchIndexResponse
-                {
-                    Matches = result.Results.Select(
-                        result => new KeyValuePair<string, MatchCollection>(
-                            result.Key,
-                            new MatchCollection()
-                            {
-                                FileName = result.Value.FileName,
-                                Word = result.Value.Word
-                            }))
-                };
+                throw new InvalidOperationException("Index is not loaded");
             }
+
+            var result = index.FindMatches(searchQuery);
+
+            return new SearchIndexResponse
+            {
+                Matches = result.Results.Select(
+                    result => new KeyValuePair<string, MatchCollection>(
+                        result.Key,
+                        new MatchCollection()
+                        {
+                            FileName = result.Value.FileName,
+                            Word = result.Value.Word
+                        }))
+            };
         }
 
         private void EnsureIndexLoaded(string directory)

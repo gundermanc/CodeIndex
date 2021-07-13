@@ -84,7 +84,7 @@
         {
             var context = new StorageContextReader(Path.Combine(inputDirectory, IndexFileName));
 
-            var pageCache = new PageCache(maxCount: 15, recordsPerPage: 15);
+            var pageCache = new PageCache(maxCount: 1000, recordsPerPage: 15);
 
             return new Index(
                 context,
