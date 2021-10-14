@@ -29,7 +29,8 @@
 
         public static async Task CreateAsync(string inputDirectory)
         {
-            var files = Directory.GetFiles(inputDirectory, "*", SearchOption.AllDirectories);
+            var files = Directory.GetFiles(inputDirectory, "*", SearchOption.AllDirectories)
+                .Where(file => !file.EndsWith(".pdb") && !file.EndsWith(".exe") && !file.EndsWith(".lib") && !file.EndsWith(".vsix") && !file.EndsWith(".dll") && !file.EndsWith(".zip") && !file.EndsWith(".nupkg") && !file.EndsWith(".log") && !file.EndsWith(".winmd") && !file.EndsWith(".png") && !file.EndsWith(".so") && !file.EndsWith(".dat"));
             var indexer = new CompoundIndexer(files);
 
             (var words, var wordToFileMap) = await indexer.IndexAsync();
