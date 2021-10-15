@@ -126,7 +126,7 @@
                         // Realize into an actual string key.
                         realizedKey = new NonAllocatingKey(
                             key.source,
-                            key.unrealizedString.ToString(),
+                            key.unrealizedString.ToString().ToUpperInvariant(),
                             key.unrealizedString,
                             key.keyId);
 

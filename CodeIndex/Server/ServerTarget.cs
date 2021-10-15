@@ -91,7 +91,7 @@
                         new MatchCollection()
                         {
                             FileName = result.Value.FileName,
-                            Word = result.Value.Word
+                            Word = result.Value.Tokens.FirstOrDefault() //TODO: retunr all
                         }))
             };
         }

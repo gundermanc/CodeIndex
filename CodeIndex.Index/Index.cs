@@ -96,23 +96,24 @@
 
         public ResultSet FindMatches(string query)
         {
-            var tokens = FileIndexer.TokenizeString(query);
+            var trigrams = FileIndexer.TrigramString(query).ToArray();
+            var tokens = FileIndexer.TokenizeString(query).ToArray();
 
             // Search for matching tokens.
             var matchIndexes = new List<int>();
-            foreach (var token in tokens)
+            foreach (var token in trigrams)
             {
                 // Binary search to find prefix matches.
-                var currentMatch = FindFirstMatch(this.wordsList, query);
-                while (currentMatch != -1 &&
+                var currentMatch = FindFirstMatch(this.wordsList, token);
+                if (currentMatch != -1 &&
                     this.wordsList[currentMatch].Value.StartsWith(token, StringComparison.OrdinalIgnoreCase))
                 {
-                    matchIndexes.Add(currentMatch++);
+                    matchIndexes.Add(currentMatch);
                 }
             }
 
-            // Assemble a mapping from file => contained keyword.
-            var fileTokenMatches = new Dictionary<string, LazyMatchCollection>(StringComparer.OrdinalIgnoreCase);
+            // Count trigrams matched by each file.
+            var fileTokenMatches = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             foreach (var matchIndex in matchIndexes)
             {
                 var word = this.wordsList[matchIndex];
@@ -122,10 +123,23 @@
                 {
                     var fileName = this.filesList[containingFileIndicies[i].Value];
 
-                    if (!fileTokenMatches.TryGetValue(fileName.Value, out var fileTokens))
+                    if (!fileTokenMatches.TryGetValue(fileName.Value, out var trigramCount))
                     {
-                        fileTokens = fileTokenMatches[fileName.Value] = new LazyMatchCollection(fileName.Value, word.Value);
+                        fileTokenMatches[fileName.Value] = trigramCount = 0;
                     }
+
+                    fileTokenMatches[fileName.Value]++;
+                }
+            }
+
+            var fileTokenMatches2 = new Dictionary<string, LazyMatchCollection>(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in fileTokenMatches)
+            {
+                // Only add full matches.
+                if (file.Value == trigrams.Length)
+                {
+                    // TODO: can probably make an option to return partial matches too.
+                    fileTokenMatches2[file.Key] = new LazyMatchCollection(file.Key, tokens);
                 }
             }
 
@@ -134,14 +148,13 @@
             // Then substring matches.
             // Then de-prioritize tests, which are noisy and rarely what we want.
             // Then score by term frequency.
-            var results = fileTokenMatches
-                .OrderByDescending(match => tokens.Any(token => Path.GetFileNameWithoutExtension(match.Value.FileName).Equals(token, StringComparison.OrdinalIgnoreCase)))
-                .OrderByDescending(match => tokens.Any(token => match.Key.Contains(token, StringComparison.OrdinalIgnoreCase)))
+            var results = fileTokenMatches2
+                .OrderByDescending(match => trigrams.Any(token => Path.GetFileNameWithoutExtension(match.Value.FileName).Equals(token, StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(match => trigrams.Any(token => match.Key.Contains(token, StringComparison.OrdinalIgnoreCase)))
                 .ThenBy(match => match.Key.Contains("Test"))
-                //.ThenByDescending(match => match.Value.Count)
                 .Take(10).ToList();
 
-            return new ResultSet(tokens, results);
+            return new ResultSet(FileIndexer.TokenizeString(query), results);
         }
 
         private static int FindFirstMatch(IReadOnlyList<VarChar> index, string token)
@@ -168,7 +181,7 @@
                 }
             }
 
-            return m;
+            return m - 1;
         }
 
         public void Dispose() => this.context.Dispose();
