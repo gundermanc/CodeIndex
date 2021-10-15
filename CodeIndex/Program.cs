@@ -4,6 +4,7 @@
     using CodeIndex.Index;
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Linq;
     using System.Threading.Tasks;
@@ -21,7 +22,6 @@
 
             while (true)
             {
-                Console.Clear();
                 PrintUsageInfo();
                 WriteLineInColor("CodeIndex>> ", ConsoleColor.Green);
 
@@ -31,7 +31,12 @@
                 {
                     var inputDirectory = command["index ".Length..];
                     WriteLineInColor("Indexing...", ConsoleColor.Cyan);
+                    
+                    var stopwatch = Stopwatch.StartNew();
+
                     await Index.Index.CreateAsync(inputDirectory);
+
+                    Console.WriteLine($"Indexed {inputDirectory} in {stopwatch.ElapsedMilliseconds} milliseconds");
                 }
                 else if (command.StartsWith("load "))
                 {
@@ -51,7 +56,11 @@
 
                 var searchString = Console.ReadLine();
 
+                var stopwatch = Stopwatch.StartNew();
                 var results = index.FindMatches(searchString);
+                stopwatch.Stop();
+
+                Console.WriteLine($"Narrowed search to {results.FilesConsidered} of {results.TotalFiles} files ({(float)results.FilesConsidered / results.TotalFiles * 100}%), in {stopwatch.ElapsedMilliseconds} milliseconds.");
 
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine("Found matches in:");

@@ -30,7 +30,7 @@
         public static async Task CreateAsync(string inputDirectory)
         {
             var files = Directory.GetFiles(inputDirectory, "*", SearchOption.AllDirectories)
-                .Where(file => !file.EndsWith(".pdb") && !file.EndsWith(".exe") && !file.EndsWith(".lib") && !file.EndsWith(".vsix") && !file.EndsWith(".dll") && !file.EndsWith(".zip") && !file.EndsWith(".nupkg") && !file.EndsWith(".log") && !file.EndsWith(".winmd") && !file.EndsWith(".png") && !file.EndsWith(".so") && !file.EndsWith(".dat"));
+                .Where(file => !file.EndsWith(".pdb") && !file.EndsWith(".exe") && !file.EndsWith(".lib") && !file.EndsWith(".vsix") && !file.EndsWith(".dll") && !file.EndsWith(".zip") && !file.EndsWith(".nupkg") && !file.EndsWith(".log") && !file.EndsWith(".winmd") && !file.EndsWith(".png") && !file.EndsWith(".so") && !file.EndsWith(".dat")).ToArray();
             var indexer = new CompoundIndexer(files);
 
             (var words, var wordToFileMap) = await indexer.IndexAsync();
@@ -148,13 +148,15 @@
             // Then substring matches.
             // Then de-prioritize tests, which are noisy and rarely what we want.
             // Then score by term frequency.
-            var results = fileTokenMatches2
+            List<KeyValuePair<string, LazyMatchCollection>>? results = fileTokenMatches2
                 .OrderByDescending(match => trigrams.Any(token => Path.GetFileNameWithoutExtension(match.Value.FileName).Equals(token, StringComparison.OrdinalIgnoreCase)))
                 .OrderByDescending(match => trigrams.Any(token => match.Key.Contains(token, StringComparison.OrdinalIgnoreCase)))
                 .ThenBy(match => match.Key.Contains("Test"))
                 .Take(10).ToList();
 
-            return new ResultSet(FileIndexer.TokenizeString(query), results);
+            results = results.Take(10).ToList();
+
+            return new ResultSet(FileIndexer.TokenizeString(query), results, filesConsidered: fileTokenMatches2.Count, totalFiles: this.filesList.Count);
         }
 
         private static int FindFirstMatch(IReadOnlyList<VarChar> index, string token)
