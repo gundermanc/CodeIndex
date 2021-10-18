@@ -2,7 +2,9 @@
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Text;
+    using System.Threading;
     using System.Threading.Tasks;
 
     using static CodeIndex.Index.NonAllocatingKey;
@@ -13,7 +15,7 @@
 
         private readonly Dictionary<string, HashSet<string>> wordToContainingFileMapping = new(StringComparer.OrdinalIgnoreCase);
 
-        private int nextFileToIndex;
+        private int nextFileToIndex = -1;
 
         public IReadOnlyList<string> Files { get; }
 
@@ -44,15 +46,16 @@
                 consumerTasks.Add(Task.Run(this.ConsumeAsync));
             }
 
+            consumerTasks.Add(Task.Run(this.PrintProgressAsync));
+
             await Task.WhenAll(consumerTasks);
 
             return (this.words, this.wordToContainingFileMapping);
         }
 
-        private async Task ConsumeAsync()
+        private async Task PrintProgressAsync()
         {
-            NonAllocatingKeySourceCache cache = new();
-            string? file = null;
+            int nextFileToIndex = 0;
 
             while (true)
             {
@@ -63,19 +66,45 @@
                         return;
                     }
 
-                    file = this.Files[this.nextFileToIndex++];
-
-                    if (file is null)
-                    {
-                        return;
-                    }
+                    nextFileToIndex = this.nextFileToIndex;
                 }
 
-                var words = await FileIndexer.QuickIndexFile(cache, file);
+                await Task.Delay(1000);
 
-                foreach (var word in words)
+                Console.WriteLine($"Indexing progress: {nextFileToIndex} of {this.Files.Count} ({(float)nextFileToIndex / this.Files.Count * 100}%)");
+            }
+        }
+
+        private async Task ConsumeAsync()
+        {
+            NonAllocatingKeySourceCache cache = new();
+            string? file = null;
+
+            while (true)
+            {
+                var nextFileToIndex = Interlocked.Increment(ref this.nextFileToIndex);
+
+                if (nextFileToIndex >= this.Files.Count)
                 {
-                    this.AddWord(file, word);
+                    return;
+                }
+
+                file = this.Files[nextFileToIndex];
+
+                if (file is null)
+                {
+                    return;
+                }
+
+                // Ignore large (probably non-code files).
+                if (new FileInfo(file).Length < 500_000)
+                {
+                    var words = await FileIndexer.QuickIndexFile(cache, file);
+
+                    foreach (var word in words)
+                    {
+                        this.AddWord(file, word);
+                    }
                 }
             }
         }

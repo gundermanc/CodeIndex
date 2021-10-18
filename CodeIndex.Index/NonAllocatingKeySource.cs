@@ -34,7 +34,7 @@
     {
         private readonly NonAllocatingKeySource source;
         private readonly string? realizedString;
-        private readonly ReadOnlyMemory<char> unrealizedString;
+        private readonly ReadOnlyMemory<char> stringMemory;
         private readonly int keyId;
 
         public NonAllocatingKey(
@@ -45,18 +45,17 @@
         {
             this.source = source;
             this.realizedString = realizedString;
-            this.unrealizedString = unrealizedString;
+            this.stringMemory = unrealizedString;
             this.keyId = keyId;
         }
 
-        public ReadOnlyMemory<char> Memory => this.realizedString?.AsMemory()
-            ?? this.unrealizedString;
+        public ReadOnlyMemory<char> Memory => this.stringMemory;
 
         public string String
         {
             get
             {
-                return this.realizedString ?? this.Memory.ToString(); //throw new InvalidOperationException("Cannot get string from transient key");
+                return this.realizedString ?? throw new InvalidOperationException("Cannot get string from transient key");
             }
         }
 
@@ -122,12 +121,13 @@
                     if (!this.realizedKeyCache.TryGetValue(key, out var realizedKey))
                     {
                         // this.readerWriterLock.UpgradeToWriterLock(int.MaxValue);
+                        var realizedString = key.stringMemory.ToString().ToUpperInvariant();
 
                         // Realize into an actual string key.
                         realizedKey = new NonAllocatingKey(
                             key.source,
-                            key.unrealizedString.ToString().ToUpperInvariant(),
-                            key.unrealizedString,
+                            realizedString,
+                            realizedString.AsMemory(),
                             key.keyId);
 
                         // Add to the cache so we can reuse the same string for subsequent occurrences

@@ -17,7 +17,7 @@
             var source = new NonAllocatingKeySource(cache);
             HashSet<NonAllocatingKey> words = new HashSet<NonAllocatingKey>();
 
-            char [] buffer = new char[1024];
+            char[] buffer = new char[1024];
             int read;
 
             using (var stream = new StreamReader(File.OpenRead(file)))
@@ -49,11 +49,10 @@
                 var key = source.GetTransientKey(buffer[wordStart..(wordStart + 3)]);
                 var keySpan = key.Memory.Span;
                 if (keySpan.Length == Encoding.UTF8.GetByteCount(keySpan) &&
-                    words.Add(key))
+                    !words.Contains(key))
                 {
                     // No, it hasn't. Allocate a string for this (freeing our buffer for reuse)
                     // remove the transient key, and re-add.
-                    words.Remove(key);
                     words.Add(key.Realize());
                 }
 

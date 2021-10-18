@@ -55,6 +55,14 @@
                     maxFileSize,
                     sortedFiles.Select(file => new VarChar(file)));
 
+                // Dictionary of files for quick lookup.
+                var filesDictionary = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                int i = 0;
+                foreach (var file in sortedFiles)
+                {
+                    filesDictionary.Add(file, i++);
+                }
+
                 // Write the mapping from the sorted words list indexes to the sorted files that contain them.
                 var containingFileEntries = new List<List<Integer>>();
                 foreach (var word in sortedWords)
@@ -65,9 +73,7 @@
 
                         foreach (var file in containingFiles)
                         {
-                            // TODO: binary search in tight inner loop is very slow.
-                            var entryIndex = Array.BinarySearch(sortedFiles, file);
-                            if (entryIndex != -1)
+                            if (filesDictionary.TryGetValue(file, out var entryIndex))
                             {
                                 entries.Add(new Integer(entryIndex));
                             }
