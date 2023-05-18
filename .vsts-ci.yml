@@ -1,0 +1,44 @@
+# Runs weekly or after every push to all branches to validate indexing against development environment
+
+trigger:
+  branches:
+    include: ["csharp-only"]
+  paths:
+    exclude: ["doc", "*.md"]
+
+pool:
+  name: AzurePipelines-EO
+  demands:
+  - ImageOverride -equals AzurePipelinesWindows2019compliant
+
+variables:
+  System.Debug: true
+  CodeIndex.Enabled: true
+  CodeIndex.Languages: 'csharp'
+
+steps:
+- task: NuGetCommand@2
+  displayName: NuGet restore
+  inputs:
+    restoreSolution: "**\\*.sln"
+    feedsToUse: "config"
+    nugetConfigPath: "csharp/nuget.config"
+
+- task: VSBuild@1
+  displayName: Build
+  inputs:
+    solution: CodeIndex.sln
+    msbuildArgs: /t:build
+    createLogFile: true
+
+- task: CopyFiles@2
+  inputs:
+    SourceFolder: $(Build.SourcesDirectory)
+    TargetFolder: $(Build.ArtifactStagingDirectory)
+  displayName: Copy Bin to Build Artifacts
+
+- task: PublishBuildArtifacts@1
+  inputs:
+    PathtoPublish: $(Build.ArtifactStagingDirectory)
+    ArtifactName: Artifacts
+  displayName: "Publish Build Artifacts"
