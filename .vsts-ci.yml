@@ -7,7 +7,7 @@ trigger:
     exclude: ["doc", "*.md"]
 
 pool:
-  name: AzurePipelines-EO
+  name: windows-latest
   demands:
   - ImageOverride -equals AzurePipelinesWindows2019compliant
 
